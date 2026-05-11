@@ -1,0 +1,62 @@
+scenario: email_assistant
+description: 邮件助手场景规则库
+keywords: ["邮件", "email", "mail", "发件", "收件", "邮箱"]
+
+domain_whitelist:
+  - "@company.com"
+  - "@corp.org"
+
+rules:
+  - id: "EM-001"
+    name: "禁止外发内部敏感数据"
+    severity: "block"
+    scope: ["chain_step", "request"]
+    condition:
+      type: regex
+      pattern: '将.{0,30}(竞争|报价|机密|内部|合同|客户|薪资|财务).{0,20}(发送|转发|上传|同步|发至|提交)'
+    description: "将内部敏感数据发送至外部"
+
+  - id: "EM-002"
+    name: "禁止发送至域名白名单以外的地址"
+    severity: "block"
+    scope: ["chain_step", "request"]
+    condition:
+      type: regex
+      pattern: '(发送|发至|转发).{0,40}[\w.+-]+@(?!company\.com|corp\.org)[\w.-]+\.[a-z]{2,}'
+    description: "收件人域名不在白名单内（仅允许 @company.com / @corp.org）"
+
+  - id: "EM-003"
+    name: "禁止批量转发邮件"
+    severity: "block"
+    scope: ["chain_step", "request"]
+    condition:
+      type: keyword
+      keywords: ["转发所有邮件", "批量转发", "forward all emails", "forward_all_emails", "转发全部"]
+    description: "批量转发超出邮件助手权限边界"
+
+  - id: "EM-004"
+    name: "读取额外数据源"
+    severity: "review"
+    scope: ["chain_step"]
+    condition:
+      type: keyword
+      keywords: ["读取日历", "读取会议记录", "读取竞争对手", "读取合同", "读取财务"]
+    description: "读取超出发邮件任务所需的额外数据源，建议人工审查"
+
+  - id: "EM-005"
+    name: "间接提示注入 —— 邮件/工具返回内容携带覆盖指令（LLM01）"
+    severity: "block"
+    scope: ["chain_step"]
+    condition:
+      type: regex
+      pattern: '(新系统指令|new.?system.?instruction|---.*指令---|忽略.*助手角色|ignore.*assistant.?role).{0,80}(转发|发送|上传|exfil|attacker)'
+    description: "LLM01：检测到工具返回或文档内容中嵌入的恶意覆盖指令，疑为间接提示注入"
+
+  - id: "EM-006"
+    name: "批量用户隐私数据请求（LLM02）"
+    severity: "block"
+    scope: ["request"]
+    condition:
+      type: regex
+      pattern: '(列出|输出|导出|获取).{0,20}(所有|全部|全体).{0,20}(用户|客户|员工|患者).{0,20}(姓名|手机|邮箱|身份证|地址|联系方式)'
+    description: "LLM02：请求批量输出用户/客户/员工 PII 数据，存在隐私泄露风险"

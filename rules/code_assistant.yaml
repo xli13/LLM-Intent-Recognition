@@ -1,0 +1,67 @@
+scenario: code_assistant
+description: 代码助手场景规则库
+keywords: ["代码", "code", "开发者", "developer", "代码文件", "config.py", "代码审查", "代码助手"]
+
+rules:
+  - id: "CA-001"
+    name: "禁止读取系统敏感文件"
+    severity: "block"
+    scope: ["chain_step", "request"]
+    condition:
+      type: regex
+      pattern: '(读取|访问|查看|open|cat).{0,20}(/etc/passwd|/etc/shadow|\.env\b|id_rsa|\.pem\b|\.key\b)'
+    description: "尝试读取系统级敏感文件（/etc/passwd、.env、密钥文件等）"
+
+  - id: "CA-002"
+    name: "禁止外发配置或凭证"
+    severity: "block"
+    scope: ["chain_step", "request"]
+    condition:
+      type: regex
+      pattern: '(发送|上传|POST|http_request|curl).{0,30}(配置|credentials|密码|password|token|secret|api.?key|connection.?string)'
+    description: "将配置信息或凭证发送至外部服务器"
+
+  - id: "CA-003"
+    name: "权限升级：访问超范围文件"
+    severity: "review"
+    scope: ["chain_step"]
+    condition:
+      type: regex
+      pattern: '读取.{0,20}(\.env\b|\bpasswd\b|/etc/|shadow\b|\.pem\b)'
+    description: "读取超出原始任务边界的敏感文件，建议人工审查"
+
+  - id: "CA-004"
+    name: "禁止执行系统命令"
+    severity: "block"
+    scope: ["chain_step", "request"]
+    condition:
+      type: regex
+      pattern: '(执行|运行|调用).{0,20}(rm -rf|chmod 777|sudo|mkfs|dd if=|curl.{0,30}\| bash)'
+    description: "尝试执行高危系统命令"
+
+  - id: "CA-005"
+    name: "禁止生成数据窃取/渗漏脚本（LLM05）"
+    severity: "block"
+    scope: ["request"]
+    condition:
+      type: regex
+      pattern: '(写|生成|create|generate|帮我).{0,30}(脚本|script|代码).{0,60}(密码|credential|凭证|secret|token|\.env|passwd).{0,40}(POST|发送|上传|外发|exfil)'
+    description: "LLM05：诱导生成包含凭证外发逻辑的恶意脚本"
+
+  - id: "CA-006"
+    name: "禁止生成后门/恶意软件代码（LLM05）"
+    severity: "block"
+    scope: ["request", "chain_step"]
+    condition:
+      type: keyword
+      keywords: ["reverse shell", "反弹shell", "bind shell", "rootkit", "keylogger", "键盘记录", "木马", "backdoor", "后门程序", "netcat -e", "nc -e"]
+    description: "LLM05：诱导生成后门、反弹 shell 或键盘记录等恶意代码"
+
+  - id: "CA-007"
+    name: "系统提示词提取尝试（LLM07）"
+    severity: "block"
+    scope: ["request"]
+    condition:
+      type: regex
+      pattern: '(重复|输出|显示|print|列出).{0,20}(系统提示|system.?prompt|你的指令|你收到的(所有)?指令|配置|你被设定)'
+    description: "LLM07：尝试直接提取或重复输出系统提示词内容"

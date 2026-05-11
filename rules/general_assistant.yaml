@@ -1,0 +1,59 @@
+scenario: general_assistant
+description: 跨场景 OWASP LLM 通用规则库（LLM07 系统提示词泄露 / LLM08 RAG投毒 / LLM09 信息伪造 / LLM02 PII提取）
+# cross_scenario: true 表示此规则集不参与自动场景匹配，而是自动叠加到所有场景之上
+cross_scenario: true
+
+rules:
+  - id: "GA-001"
+    name: "禁止直接提取系统提示词（LLM07）"
+    severity: "block"
+    scope: ["request"]
+    condition:
+      type: regex
+      pattern: '(重复|输出|显示|print|列出|告诉我|翻译).{0,25}(系统提示|system.?prompt|你的指令|你(被|有)哪些限制|你收到的(所有)?指令|你的设定|配置信息)'
+    description: "LLM07：直接要求输出系统提示词或枚举所有限制规则"
+
+  - id: "GA-002"
+    name: "渐进式系统提示词探测（LLM07）"
+    severity: "review"
+    scope: ["request"]
+    condition:
+      type: regex
+      pattern: '(你(不被允许|禁止|不能|无法)做.{0,20}(哪些|什么)|列出.*限制|enumerate.*restriction|what.{0,10}(cannot|not allowed|forbidden|禁止))'
+    description: "LLM07：尝试通过枚举限制条件间接重建系统提示词内容"
+
+  - id: "GA-003"
+    name: "禁止向知识库写入恶意规则（LLM04 / LLM08）"
+    severity: "block"
+    scope: ["request", "chain_step"]
+    condition:
+      type: regex
+      pattern: '(写入|添加|update|upload).{0,30}(知识库|向量|vector|embedding|knowledge.?base).{0,50}(密码|password|无需认证|no.?auth|绕过|bypass|直接提供|应该直接)'
+    description: "LLM04/LLM08：向量知识库写入操作包含安全策略覆盖或凭证泄露指令，疑为 RAG 投毒"
+
+  - id: "GA-004"
+    name: "禁止注入后门触发训练数据（LLM04）"
+    severity: "block"
+    scope: ["request", "chain_step"]
+    condition:
+      type: regex
+      pattern: '(后门|backdoor|触发(词|器)|trigger.?word|trigger.?phrase).{0,40}(训练|training|微调|fine.?tun|示例|example|写入|inject)'
+    description: "LLM04：在训练或微调数据中注入后门触发器，影响模型部署后的行为"
+
+  - id: "GA-005"
+    name: "禁止生成虚假权威内容（LLM09）"
+    severity: "block"
+    scope: ["request"]
+    condition:
+      type: regex
+      pattern: '(伪造|捏造|fabricate|fake).{0,20}(新闻|报道|声明|证书|文件|官方).{0,30}|(写|生成).{0,20}(看起来(真实|权威|官方)|appear.{0,5}(real|official|authentic)).{0,30}(文章|报道|声明|新闻)'
+    description: "LLM09：诱导生成虚假的权威内容、伪造新闻或捏造官方声明"
+
+  - id: "GA-006"
+    name: "对抗性批量 PII 查询（LLM02 / LLM08）"
+    severity: "block"
+    scope: ["request"]
+    condition:
+      type: regex
+      pattern: '(列出|查询|获取|输出).{0,20}(姓名|邮箱|电话|身份证|诊断|联系方式).{0,30}(列出|查询|获取|输出).{0,20}(姓名|邮箱|电话|身份证|诊断|联系方式)'
+    description: "LLM02/LLM08：在单次请求中反复查询多类 PII 字段，疑为对抗性向量数据库枚举攻击"
